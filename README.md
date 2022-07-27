@@ -1,11 +1,5 @@
-# lambda-template
-A GitHub template for quickly starting a new AWS lambda project.
-
-## Naming
-Naming conventions:
-* for a vanilla Lambda: `lambda-<context>`
-* for a Cloudformation Transform macro: `cfn-macro-<context>`
-* for a Cloudformation Custom Resource: `cfn-cr-<context>`
+# lambda-cost-reports
+A Lambda for generating cost and usage reports grouped by cost center.
 
 ## Development
 
@@ -39,7 +33,7 @@ Running integration tests
 [requires docker](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-cli-command-reference-sam-local-start-api.html)
 
 ```shell script
-$ sam local invoke HelloWorldFunction --event events/event.json
+$ sam local invoke MonthlyCostReportFunction --event events/event.json
 ```
 
 ## Deployment

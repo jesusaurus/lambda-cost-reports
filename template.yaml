@@ -1,43 +1,50 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: >
-  Hello World lambda
+  Lambda to analyze monthly Cost and Usage Reports to group costs by program cost center.
 
 Metadata:
   AWS::ServerlessRepo::Application:
-    Name: "lambda-template"
-    Description: "A GH template for quickly starting a new AWS lambda project."
+    Name: "lambda-cost-reports"
+    Description: "Lambda to analyze monthly Cost and Usage Reports to group costs by program cost center."
     Author: "Sage-Bionetworks"
     SpdxLicenseId: "Apache-2.0"
     # paths are relative to .aws-sam/build directory
     LicenseUrl: "LICENSE"
     ReadmeUrl: "README.md"
-    Labels: ["serverless", "template", "github", "quick-start"]
-    HomePageUrl: "https://github.com/Sage-Bionetworks-IT/lambda-template"
-    SemanticVersion: "0.0.3"
-    SourceCodeUrl: "https://github.com/Sage-Bionetworks-IT/lambda-template/tree/0.0.3"
+    HomePageUrl: "https://github.com/Sage-Bionetworks-IT/lambda-cost-reports"
+    SemanticVersion: "0.0.1"
+    SourceCodeUrl: "https://github.com/Sage-Bionetworks-IT/lambda-cost-reports/tree/0.0.1"
 
 # More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
 Globals:
   Function:
-    Timeout: 30
+    Timeout: 120
+
+Parameters:
+  Schedule:
+    Description: >
+      Schedule to execute the lambda, can be a rate or a cron schedule. Format at
+      https://docs.aws.amazon.com/AmazonCloudWatch/latest/events/ScheduledEvents.html
+    Type: String
+    Default: cron(0 12 1 * ? *)  # Run at noon on the first day of the month
+    ConstraintDescription: "Use schedule format: https://docs.aws.amazon.com/AmazonCloudWatch/latest/events/ScheduledEvents.html"
 
 Resources:
-  HelloWorldFunction:
+  MonthlyCostReportFunction:
     Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
     Properties:
       CodeUri: .
-      Handler: hello_world/app.lambda_handler
-      Runtime: python3.7
-      Role: !GetAtt FunctionRole.Arn
+      Handler: cost_reports/app.lambda_handler
+      Runtime: python3.8
+      Role: !GetAtt MonthlyCostReportFunctionRole.Arn
       Events:
-        HelloWorld:
-          Type: Api # More info about API Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#api
+        MonthlyTrigger:
+          Type: Schedule # More info about Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#schedule
           Properties:
-            Path: /hello
-            Method: get
+            Schedule: !Ref Schedule
 
-  FunctionRole:   # execute lambda function with this role
+  MonthlyCostReportFunctionRole:   # execute lambda function with this role
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
@@ -51,17 +58,12 @@ Resources:
               - sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
 
 Outputs:
-  # ServerlessRestApi is an implicit API created out of Events key under Serverless::Function
-  # Find out more about other implicit resources you can reference within SAM
-  # https://github.com/awslabs/serverless-application-model/blob/master/docs/internals/generated_resources.rst#api
-  HelloWorldApi:
-    Description: "API Gateway endpoint URL for Prod stage for Hello World function"
-    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/hello/"
-  HelloWorldFunctionArn:
-    Description: "Hello World Lambda Function ARN"
-    Value: !GetAtt HelloWorldFunction.Arn
-  HelloWorldFunctionRoleArn:
-    Description: "Implicit IAM Role created for Hello World function"
-    Value: !GetAtt FunctionRole.Arn
+  MonthlyCostReportFunctionArn:
+    Description: "Monthly Cost Report Lambda Function ARN"
+    Value: !GetAtt MonthlyCostReportFunction.Arn
+  MonthlyCostReportFunctionRoleArn:
+    Description: "Implicit IAM Role created for Monthly Cost Report function"
+    Value: !GetAtt MonthlyCostReportFunctionRole.Arn
