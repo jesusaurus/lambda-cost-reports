@@ -6,10 +6,15 @@
 # For other accounts, the CostCenter tag will be used to categorized
 # the line item
 
-import math
+import logging
 import re
-import pandas as pd
 
+import pandas as pd
+import matplotlib.pyplot as plt
+
+
+LOG = logging.getLogger(__name__)
+LOG.setLevel(logging.INFO)
 
 ACCOUNT_ID_COLUMN = 'line_item_usage_account_id'
 VALUE_COLUMN = 'line_item_unblended_cost'
@@ -32,10 +37,19 @@ TAG_REPLACEMENT = {
 }
 
 
-def main(cur_parquet, account_csv):
-    report_body = ""
+def report_head(title):
+    return f"""<html>
+        <head><title>{title}</title></head>
+        <body><h2>{title}</h2>"""
+
+def report_foot(total):
+    return f"<h4>Total: ${total:.2f}</h4></body></html>"
+
+def main(cur_parquet, account_csv, title_month):
+    report_body = report_head(title_month)
 
     # Read in the account labels, for those accounts whose costs are all allocated the same way
+    LOG.info("Reading accounts csv file")
     accounts_columns = {
         'account_id':'str',
         ACCOUNT_NAME_COLUMN:'str',
@@ -57,79 +71,45 @@ def main(cur_parquet, account_csv):
         DESCRIPTION_COLUMN
     ]
 
+    LOG.info("Reading billing parquet file")
     acct_rows = pd.read_parquet(cur_parquet, columns=columns)
 
     # Compute total cost for the month
+    LOG.info("Calculating original total")
     total_cost = acct_rows[VALUE_COLUMN].sum()
 
     # we now want to inner join df with accounts on ACCOUNT_ID_COLUMN <-> 'account_id'
+    LOG.info("Inner joining data sources on account id")
     accounts = accounts.rename(columns={'account_id': ACCOUNT_ID_COLUMN})
     joined = acct_rows.join(accounts.set_index(ACCOUNT_ID_COLUMN), on=ACCOUNT_ID_COLUMN, how="inner")
-    report_body += f"Total line items: {joined.shape[0]}\n"
-
-    # either cost center is not null or account cost center is not null (one of the two IS set)
-    has_center = joined[
-        (
-            (joined[COST_CENTER_COLUMN].notna()) &
-            (joined[COST_CENTER_COLUMN] != 'na')
-        ) | (
-            (joined[ACCOUNT_COST_CENTER_COLUMN].notna()) &
-            (joined[ACCOUNT_COST_CENTER_COLUMN] != 'na')
-        )
-    ]
-    report_body += f"Rows with Cost Center data: {has_center.shape[0]}\n"
-
-    # cost center is either null or 'na' AND account cost center is either null or 'na'
-    no_center = joined[
-        (
-            (joined[COST_CENTER_COLUMN].isna()) |
-            (joined[COST_CENTER_COLUMN] == 'na')
-        ) & (
-            (joined[ACCOUNT_COST_CENTER_COLUMN].isna()) |
-            (joined[ACCOUNT_COST_CENTER_COLUMN] == 'na')
-        )
-    ]
-    report_body += f"Rows without Cost Center data: {no_center.shape[0]}\n"
 
     # group expenses by their cost center.  See group_by() for details
-    by_center = acct_rows.groupby((lambda row_index: group_by_cost_center(joined,row_index)), dropna=False, group_keys=False)
-
-    # group expenses by their cloudformation stack.  See group_by() for details
-    by_stack = no_center.groupby((lambda row_index: group_by_tag(no_center,row_index,CLOUDFORMATION_STACK_COLUMN,"Cloudformation Stack")), dropna=False, group_keys=False)
-
-    # group expenses by their service catalog provisioner.  See group_by() for details
-    by_catalog = no_center.groupby((lambda row_index: group_by_tag(no_center,row_index,SERVICE_CATALOG_PRINCIPAL_COLUMN,"Service Catalog Provisioner")), dropna=False, group_keys=False)
+    LOG.info("Grouping by cost center")
+    by_center = acct_rows.groupby((lambda row_index: group_by_cost_center(joined,row_index)), dropna=False, group_keys=False, as_index=True)
 
     # sum up each category and sort, descending
-    center_summed = by_center.sum().sort_values(VALUE_COLUMN, ascending=False)[[VALUE_COLUMN]]
-    stack_summed = by_stack.sum().sort_values(VALUE_COLUMN, ascending=False)[[VALUE_COLUMN]]
-    catalog_summed = by_catalog.sum().sort_values(VALUE_COLUMN, ascending=False)[[VALUE_COLUMN]]
+    center_summed = by_center.sum().rename(columns={VALUE_COLUMN:DISPLAY_VALUE_COLUMN})
+    center_sorted = center_summed.sort_values(DISPLAY_VALUE_COLUMN, ascending=False)
 
-    # display the cost centers
-    report_body += "\nCosts by Program\n"
-    sorted = center_summed.rename(columns={VALUE_COLUMN:DISPLAY_VALUE_COLUMN})
-    with pd.option_context( 'display.precision', 2),\
-        pd.option_context('display.max_rows', 500),\
-        pd.option_context('display.max_colwidth', 200),\
-        pd.option_context('display.float_format', (lambda x : f'${x:.2f}')):
-        report_body += sorted.to_string()
+    # Generate a pretty table
+    LOG.info("Generating report")
+    report_format = {DISPLAY_VALUE_COLUMN: '${:.2f}'}
+    index_format = '<div align="right" style="padding: 2px 16px">{0}</div>'
+    report_body += center_sorted.style.format_index(index_format).format(report_format).set_caption("Costs by Program").to_html()
 
-    total = sorted[DISPLAY_VALUE_COLUMN].sum()
+    # Check that everything adds up
+    LOG.info("Verifying total")
+    total = center_sorted[DISPLAY_VALUE_COLUMN].sum()
     if (abs(total-total_cost)>0.01):
         raise Exception("categorized costs do not add up to total bill.")
-    report_body += f"\nTotal: ${total:.2f}\n"
 
-    # display cfn stacks and service catalog owners for line items with no cost center
-    for summed in [stack_summed, catalog_summed]:
-        report_body += "\nCosts without a known Program\n"
-        sorted = summed[summed[VALUE_COLUMN] >= 0.01].rename(columns={VALUE_COLUMN:DISPLAY_VALUE_COLUMN})
-        with pd.option_context( 'display.precision', 2),\
-            pd.option_context('display.max_rows', 500),\
-            pd.option_context('display.max_colwidth', 200),\
-            pd.option_context('display.float_format', (lambda x : f'${x:.2f}')):
-            report_body += sorted.to_string()
+    # Add total to the report
+    report_body += report_foot(total)
 
-    return report_body
+    # Convert DataFrameGroupBy to DataFrame so it can be written to parquet
+    report_data = by_center.apply(lambda x: x)
+
+    return report_body, report_data
 
 def safe_at(df, r, c):
     try:
@@ -141,12 +121,6 @@ def valid_value(check_value):
     if check_value is None or check_value == 'na':
         return False
     return True
-
-def group_by_tag(df, row_index, tag_column, heading):
-    tag = safe_at(df, row_index, tag_column)
-    if not valid_value(tag):
-        return f"{heading} / None"
-    return f"{heading} / {tag}"
 
 def cost_center_lookup(df, row_index):
     cost_center = safe_at(df, row_index, COST_CENTER_COLUMN)
@@ -165,7 +139,8 @@ def cost_center_lookup(df, row_index):
     cost_center = re.sub(r"(_)([0-9]{5,6})", (lambda x: " / "+x.group(2)), cost_center)
 
     # normalize 000000 case
-    cost_center = TAG_REPLACEMENT.get(cost_center, cost_center)
+    if cost_center in TAG_REPLACEMENT:
+        cost_center = TAG_REPLACEMENT[cost_center]
 
     return cost_center
 

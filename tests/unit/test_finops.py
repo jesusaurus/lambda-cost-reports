@@ -1,13 +1,18 @@
+import logging
 import os
 
 import pytest
 
 from cost_reports import finops
 
+
+LOG = logging.getLogger(__name__)
+
 FIXTURE_DIR = os.path.join(
     os.path.dirname(os.path.realpath(__file__)),
     'fixture',
 )
+
 
 @pytest.fixture()
 def parquet():
@@ -28,7 +33,11 @@ def csv():
     return rv
 
 
-def test_finops(mocker, parquet, csv):
-    report = finops.main(parquet, csv)
+def test_finops(caplog, parquet, csv):
+    """Regenerate a known report from fixtures"""
+    summary, _ = finops.main(parquet, csv, '2022 May (Test Fixture)')
+    #LOG.info(summary)
 
-    assert 'Total' in report
+    # Check the first and last line of the known report
+    assert '2022 May (Test Fixture)' in summary
+    assert 'Total: $101823.89' in summary

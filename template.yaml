@@ -3,48 +3,20 @@ Transform: AWS::Serverless-2016-10-31
 Description: >
   Lambda to analyze monthly Cost and Usage Reports to group costs by program cost center.
 
-Metadata:
-  AWS::ServerlessRepo::Application:
-    Name: "lambda-cost-reports"
-    Description: "Lambda to analyze monthly Cost and Usage Reports to group costs by program cost center."
-    Author: "Sage-Bionetworks"
-    SpdxLicenseId: "Apache-2.0"
-    # paths are relative to .aws-sam/build directory
-    LicenseUrl: "LICENSE"
-    ReadmeUrl: "README.md"
-    HomePageUrl: "https://github.com/Sage-Bionetworks-IT/lambda-cost-reports"
-    SemanticVersion: "0.0.1"
-    SourceCodeUrl: "https://github.com/Sage-Bionetworks-IT/lambda-cost-reports/tree/0.0.1"
-
 # More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
 Globals:
   Function:
-    Timeout: 120
+    Timeout: 180
 
 Parameters:
-  Schedule:
+  CurBucket:
     Description: >
-      Schedule to execute the lambda, can be a rate or a cron schedule. Format at
-      https://docs.aws.amazon.com/AmazonCloudWatch/latest/events/ScheduledEvents.html
+      The S3 bucket that AWS Billing writes the Cost and Usage Reports to.
     Type: String
-    Default: cron(0 12 1 * ? *)  # Run at noon on the first day of the month
-    ConstraintDescription: "Use schedule format: https://docs.aws.amazon.com/AmazonCloudWatch/latest/events/ScheduledEvents.html"
+    Default: sagebase-cost-reports
 
 Resources:
-  MonthlyCostReportFunction:
-    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
-    Properties:
-      CodeUri: .
-      Handler: cost_reports/app.lambda_handler
-      Runtime: python3.8
-      Role: !GetAtt MonthlyCostReportFunctionRole.Arn
-      Events:
-        MonthlyTrigger:
-          Type: Schedule # More info about Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#schedule
-          Properties:
-            Schedule: !Ref Schedule
-
-  MonthlyCostReportFunctionRole:   # execute lambda function with this role
+  CostReportFunctionRole:  # execute lambda function with this role
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
@@ -60,10 +32,52 @@ Resources:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
         - arn:aws:iam::aws:policy/AmazonS3FullAccess
 
+  CostReportFunction:
+    # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: cost_reports/app.lambda_handler
+      Runtime: python3.9
+      MemorySize: 256
+      Role: !GetAtt CostReportFunctionRole.Arn
+      Environment:
+        Variables:
+          CUR_BUCKET: !Ref CurBucket
+      Events:  # More info about Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#schedule
+        ApiTrigger:  # Ad-Hoc runs
+          Type: Api
+          Properties:
+            Path: /run
+            Method: get
+
+  S3EventRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: S3EventTrigger
+      State: ENABLED
+      EventPattern:
+        source:
+          - aws.s3
+        detail:
+          eventName:
+            - PutObject
+            - CopyObject
+            - CompleteMultipartUpload
+            - RestoreObject
+          requestParameters:
+            bucketName:
+              - !Ref CurBucket
+            key:
+              - suffix: '.snappy.parquet'
+      Targets:
+        - Arn: !GetAtt CostReportFunction.Arn
+          Id: CostReportFunction
+
 Outputs:
-  MonthlyCostReportFunctionArn:
-    Description: "Monthly Cost Report Lambda Function ARN"
-    Value: !GetAtt MonthlyCostReportFunction.Arn
-  MonthlyCostReportFunctionRoleArn:
-    Description: "Implicit IAM Role created for Monthly Cost Report function"
-    Value: !GetAtt MonthlyCostReportFunctionRole.Arn
+  CostReportFunctionArn:
+    Description: "Cost Report Lambda Function ARN"
+    Value: !GetAtt CostReportFunction.Arn
+  CostReportFunctionRoleArn:
+    Description: "Implicit IAM Role created for Cost Report function"
+    Value: !GetAtt CostReportFunctionRole.Arn

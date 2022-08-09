@@ -1,6 +1,57 @@
 # lambda-cost-reports
 A Lambda for generating cost and usage reports grouped by cost center.
 
+## Design
+
+This lambda is designed to analyze the Cost Usage Reports created by AWS Billing,
+add additional account tag information, and create a secondary report with
+costs grouped by their tagged cost center.
+
+The lambda triggers when AWS Billing updates their parquet artifact
+in our S3 bucket (or arbitrarily via API Gateway), and outputs both
+an HTML summary and a new parquet dataframe back to the same S3 bucket.
+
+Users can access HTML reports in S3 Explorer, or they can load the amended
+parquet data into a Jupyter notebook for custom analysis.
+
+### Architecture
+
+![Architecture Diagrams](docs/CUR.drawio.png)
+
+1. The first component is the creation of the Cost Report by AWS Billing,
+   configured in [org-formation](https://github.com/Sage-Bionetworks-IT/organizations-infra/blob/master/org-formation/040-budgets/cur.yaml).
+   This AWS report is configured as a parquet file with monthly granularity.
+1. This lambda is triggered either by S3 object creation for the parquet files
+1. This lambda is triggered either by an API Gateway endpoint, or by an S3 event
+   proxied through Event Bridge. Event Bridge will only proxy S3 events for creation
+   events with S3 keys that match the file written by AWS Billing (based on a
+   `.snappy.parquet` file suffix).
+   1. When triggered by an API event, the lambda will always regenerate a
+      month-to-date report for the current month.
+   1. When triggered by an S3 event proxied through Event Bridge, the event
+      will be parsed to determine the full S3 key to the created object. If
+      the key is determined to be for a previous month, the report will be marked
+      as `Complete` rather than `Month-to-Date`.
+   1. The lambda reads the parquet file written by AWS Billing and adds a column
+      for the calculated cost center. The calculated cost center is calculated
+      based on the values of the `CostCenter` and `CostCenterOther` tags for the
+      line item, as well as the `CostCenter` and `CostCenterOther` tags on the
+      containing account if no valid values are found for the line item.
+   1. The resulting data is grouped by the calculated cost center, an HTML summary
+      is generated for the grouped data, and then both the HTML summary and the
+      amended dataframe are uploaded to S3.
+
+### Planned Changes
+
+1. The initial implementation relies on a static CSV containing Cost Center
+   tags for specific accounts. This is planned to be replaced with run-time
+   lookups of account tags for all relavent accounts.
+1. The initial implementation is only outputting a single summary report
+   covering all Program Codes, but additional reports are planned to show
+   resource usage for a given Program Code.
+1. An automated notification specific to new complete reports will be added
+   in a future iteration.
+
 ## Development
 
 ### Contributions

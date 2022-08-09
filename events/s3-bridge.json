@@ -1,0 +1,15 @@
+{
+  "version": "0",
+  "source": "aws.s3",
+  "detail-type": "AWS API Call via CloudTrail",
+  "detail": {
+    "eventVersion": "1.0",
+    "eventSource": "s3.amazonaws.com",
+    "eventName": "PutObject",
+    "eventType": "AwsApiCall",
+    "requestParameters": {
+      "bucketName": "sagebase-cost-reports",
+      "key": "sagebase/monthly-costs/monthly-costs/year=YYYY/month=M/monthly-costs-00001.snappy.parquet"
+    }
+  }
+}
