@@ -1,5 +1,5 @@
 language: python
-python: 3.8
+python: 3.9
 cache: pip
 env:
   global:
@@ -16,6 +16,7 @@ install:
   - mkdir -p /tmp/awssamcli
   - curl -L "https://github.com/aws/aws-sam-cli/releases/latest/download/aws-sam-cli-linux-x86_64.zip" -o "/tmp/awssamcli/awssamcli.zip"
   - pushd /tmp/awssamcli && unzip ./awssamcli.zip && sudo ./install && popd
+  - python3.9 -m pip uninstall -y numpy  # https://github.com/pandas-dev/pandas/issues/25316#issuecomment-567547954
   - pip install pipenv
   - pipenv install --dev
 before_script:
