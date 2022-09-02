@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 
 # script breaks down an AWS Organization bill by CostCenter
-# If an account in the Organization is dedicated to a CostCenter
-# then its entire amount will be categorized as such.
-# For other accounts, the CostCenter tag will be used to categorized
-# the line item
+# If a line item has a CostCenter (or CostCenterOther if appropriate)
+# tag, it's value will be used; otherwise the CostCenter tag
+# for the associated account will be used.
 
 import logging
 import re
 
+import boto3
 import pandas as pd
 
 
@@ -47,17 +47,12 @@ def report_head(title):
 def report_foot(total):
     return f"<h4>Total: ${total:.2f}</h4></body></html>"
 
-def main(cur_parquet, account_csv, title_month):
+def main(cur_parquet, account_dict, title_month):
     report_body = report_head(title_month)
 
-    # Read in the account labels, for those accounts whose costs are all allocated the same way
-    LOG.info("Reading accounts csv file")
-    accounts_columns = {
-        'account_id':'str',
-        ACCOUNT_NAME_COLUMN:'str',
-        ACCOUNT_COST_CENTER_COLUMN:'str'
-    }
-    accounts = pd.read_csv(account_csv, usecols=accounts_columns.keys(), dtype=accounts_columns)
+    # Create a datafrom from the account dict
+    LOG.info("Reading account data")
+    accounts = pd.DataFrame.from_dict(account_dict)
 
     # Read in the month's cost and usage report
     columns=[

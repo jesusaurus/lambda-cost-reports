@@ -17,7 +17,6 @@ from urllib.parse import unquote_plus as url_unquote
 LOG = logging.getLogger(__name__)
 LOG.setLevel(logging.INFO)
 
-ACCOUNT_CSV_S3_KEY = 'account_cost_centers/table.csv'
 CUR_S3_PREFIX = 'sagebase'
 REPORT_NAME = 'monthly-costs'
 INPUT_PARQUET = f"{REPORT_NAME}-00001.snappy.parquet"
@@ -26,12 +25,16 @@ OUTPUT_PARQUET = f"{REPORT_NAME}-by-center.parquet"
 
 class App:
     s3 = None
+    orgclient = None
 
     def __init__(self, bucket, s3_key):
         if App.s3 is None:
             App.s3 = boto3.client('s3')
 
-        self.account_csv = None
+        if App.orgclient is None:
+            App.orgclient = boto3.client('organizations')
+
+        self.account_dict = {}
         self.cur_parquet = None
 
         self.summary = None
@@ -95,22 +98,63 @@ class App:
         s3_resp = App.s3.get_object(Bucket=self.bucket, Key=self.cur_key)
         self.cur_parquet = io.BytesIO(s3_resp['Body'].read())
 
-    def _download_account_csv(self):
-        """Download a CSV mapping accounts to cost centers"""
+    def _build_account_dict(self):
+        """Build a dictionary to be consumed by pandas.
 
-        s3_resp = App.s3.get_object(Bucket=self.bucket, Key=ACCOUNT_CSV_S3_KEY)
-        self.account_csv = io.BytesIO(s3_resp['Body'].read())
+        {'account_id': [,,,],
+         'account_name': [,,,],
+         'account_cost_center': [,,,]}
+        """
+
+        accounts = []
+        account_ids = []
+        account_names = []
+        account_tags = []
+        token = ''
+
+        response = App.orgclient.list_accounts()
+        accounts.extend(response['Accounts'])
+
+        if 'NextToken' in response:
+            token = response['NextToken']
+
+        while token != '':
+            response = App.orgclient.list_accounts()
+            accounts.extend(response['Accounts'])
+
+            if 'NextToken' in response:
+                token = response['NextToken']
+            else:
+                token = ''
+
+        for account in accounts:
+            _name = account['Name']
+            _id = account['Id']
+
+            tags = App.orgclient.list_tags_for_resource(ResourceId=_id)['Tags']
+            for tag in tags:
+                if tag['Key'] == 'CostCenter':
+                    account_ids.append(_id)
+                    account_names.append(_name)
+                    account_tags.append(tag['Value'])
+                    break
+            else:
+                LOG.warning(f"No CostCenter tag for account {_name} ({_id})")
+
+        self.account_dict['account_id'] = account_ids
+        self.account_dict['account_name'] = account_names
+        self.account_dict['account_cost_center'] = account_tags
 
     def _process_report(self):
         """Group costs by program cost center"""
 
+        if self.account_dict is {}:
+            raise Exception("No account tag data loaded")
+
         if self.cur_parquet is None:
             raise Exception("No cost and usage data loaded")
 
-        if self.account_csv is None:
-            raise Exception("No account cost center data loaded")
-
-        self.summary, self.data = finops.main(self.cur_parquet, self.account_csv, self.title_date)
+        self.summary, self.data = finops.main(self.cur_parquet, self.account_dict, self.title_date)
         LOG.info("Summary generated")
 
     def _upload_results(self):
@@ -131,7 +175,7 @@ class App:
         self.data.to_parquet(f"s3://{self.bucket}/{data_key}")
 
     def run(self):
-        self._download_account_csv()
+        self._build_account_dict()
         self._download_cur_parquet()
         self._process_report()
         self._upload_results()

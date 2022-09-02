@@ -34,22 +34,18 @@ parquet data into a Jupyter notebook for custom analysis.
    1. The lambda reads the parquet file written by AWS Billing and adds a column
       for the calculated cost center. The calculated cost center is calculated
       based on the values of the `CostCenter` and `CostCenterOther` tags for the
-      line item, as well as the `CostCenter` and `CostCenterOther` tags on the
-      containing account if no valid values are found for the line item.
+      line item, or falls back on the `CostCenter` tag on the containing account
+      if no valid values are found for the line item.
    1. The resulting data is grouped by the calculated cost center, an HTML summary
       is generated for the grouped data, and then both the HTML summary and the
       amended dataframe are uploaded to S3.
 
 ### Planned Changes
 
-1. The initial implementation relies on a static CSV containing Cost Center
-   tags for specific accounts. This is planned to be replaced with run-time
-   lookups of account tags for all relavent accounts.
-1. The initial implementation is only outputting a single summary report
-   covering all Program Codes, but additional reports are planned to show
-   resource usage for a given Program Code.
-1. An automated notification specific to new complete reports will be added
-   in a future iteration.
+1. The initial implementation is generating a report from an HTML table generated
+   by pandas, but this will be replaced by exporting the data to a Synapse table and
+   relying on Synapse wiki pages with embedded queries for generating reports.
+1. An automated notification specific to new complete reports will be added.
 
 ## Development
 

@@ -9,7 +9,7 @@
     "eventType": "AwsApiCall",
     "requestParameters": {
       "bucketName": "sagebase-cost-reports",
-      "key": "sagebase/monthly-costs/monthly-costs/year=YYYY/month=M/monthly-costs-00001.snappy.parquet"
+      "key": "sagebase/monthly-costs/monthly-costs/year=2022/month=7/monthly-costs-00001.snappy.parquet"
     }
   }
 }
