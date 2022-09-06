@@ -10,6 +10,7 @@ fastparquet = "~=0.8"   # Needed by pandas to read parquet
 jinja2 = "~=3.1"    # Needed by pandas to generate HTML
 fsspec = "~=2022.8" # Needed by pandas to write directly to S3
 s3fs = "~=2022.8"   # Needed by pandas to write directly to S3
+synapseclient = "~=2.6"
 
 [requires]
 python_version = "3.9"
