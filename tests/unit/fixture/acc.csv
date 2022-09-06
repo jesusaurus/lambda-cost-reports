@@ -1,0 +1,27 @@
+account_id,account_name,account_cost_center
+325565585839,Synapse,Platform Infrastructure / 990300
+055273631518,SciComp,na
+563295687221,Sandbox,na
+383874245509,Synapse DW,Platform Infrastructure / 990300
+237179673806,Service Catalog,na
+449435941126,Synapse dev,Platform Infrastructure / 990300
+745159704268,Admin Central,Platform Infrastructure / 990300
+649232250620,Bridge,Platform Infrastructure / 990300
+797640923903,IT,Platform Infrastructure / 990300
+420786776710,Bridge dev,Platform Infrastructure / 990300
+231505186444,Log Central,Platform Infrastructure / 990300
+465877038949,Service Catalog dev,Platform Infrastructure / 990300
+153370007719,Transit,Platform Infrastructure / 990300
+804034162148,IT Sandbox,Platform Infrastructure / 990300
+867686887310,AMI Repository,Platform Infrastructure / 990300
+140124849929,Security Central,Platform Infrastructure / 990300
+531805629419,Organizations,Platform Infrastructure / 990300
+216152803258,CNB,na
+888810830951,HTAN dev,HTAN-DFCI / 120100
+386990716034,iAtlas,iAtlas 3 / 314900
+841415736403,NLP Sandbox,NLP CH - Celgene / 506800
+464102568320,BMGF-Ki,BMGF Synapse Data Hosting Services / 314400
+634761300905,Mobile Health DE dev,na
+611413694531,Mobile Health DE,na
+035458030717,Workflow NF dev,na
+728882028485,Workflow NF,na

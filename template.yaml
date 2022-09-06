@@ -1,43 +1,34 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: >
-  Hello World lambda
-
-Metadata:
-  AWS::ServerlessRepo::Application:
-    Name: "lambda-template"
-    Description: "A GH template for quickly starting a new AWS lambda project."
-    Author: "Sage-Bionetworks"
-    SpdxLicenseId: "Apache-2.0"
-    # paths are relative to .aws-sam/build directory
-    LicenseUrl: "LICENSE"
-    ReadmeUrl: "README.md"
-    Labels: ["serverless", "template", "github", "quick-start"]
-    HomePageUrl: "https://github.com/Sage-Bionetworks-IT/lambda-template"
-    SemanticVersion: "0.0.3"
-    SourceCodeUrl: "https://github.com/Sage-Bionetworks-IT/lambda-template/tree/0.0.3"
+  Lambda to analyze monthly Cost and Usage Reports to group costs by program cost center.
 
 # More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
 Globals:
   Function:
-    Timeout: 30
+    Timeout: 180
+
+Parameters:
+  CurBucket:
+    Description: >
+      The S3 bucket that AWS Billing writes the Cost and Usage Reports to.
+    Type: String
+    Default: sagebase-cost-reports
 
 Resources:
-  HelloWorldFunction:
-    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+  CostReportPolicy:
+    Type: AWS::IAM::ManagedPolicy
     Properties:
-      CodeUri: .
-      Handler: hello_world/app.lambda_handler
-      Runtime: python3.7
-      Role: !GetAtt FunctionRole.Arn
-      Events:
-        HelloWorld:
-          Type: Api # More info about API Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#api
-          Properties:
-            Path: /hello
-            Method: get
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: LambdaBucketAccess
+            Effect: Allow
+            Resource: !Sub "arn:aws:s3:::${CurBucket}/*"
+            Action:
+              - "s3:*"
 
-  FunctionRole:   # execute lambda function with this role
+  CostReportFunctionRole:  # execute lambda function with this role
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
@@ -51,17 +42,60 @@ Resources:
               - sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - !Ref CostReportPolicy
+
+  CostReportFunction:
+    # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: cost_reports/app.lambda_handler
+      Runtime: python3.9
+      MemorySize: 256
+      Role: !GetAtt CostReportFunctionRole.Arn
+      Environment:
+        Variables:
+          CUR_BUCKET: !Ref CurBucket
+      Events:  # More info about Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#schedule
+        ApiTrigger:  # Ad-Hoc runs
+          Type: Api
+          Properties:
+            Path: /run
+            Method: get
+
+  S3EventRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: S3EventTrigger
+      State: ENABLED
+      EventPattern:
+        source:
+          - aws.s3
+        detail:
+          eventName:
+            - PutObject
+            - CopyObject
+            - CompleteMultipartUpload
+            - RestoreObject
+          requestParameters:
+            bucketName:
+              - !Ref CurBucket
+            key:
+              - suffix: '.snappy.parquet'
+      Targets:
+        - Arn: !GetAtt CostReportFunction.Arn
+          Id: CostReportFunction
 
 Outputs:
   # ServerlessRestApi is an implicit API created out of Events key under Serverless::Function
   # Find out more about other implicit resources you can reference within SAM
   # https://github.com/awslabs/serverless-application-model/blob/master/docs/internals/generated_resources.rst#api
-  HelloWorldApi:
-    Description: "API Gateway endpoint URL for Prod stage for Hello World function"
-    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/hello/"
-  HelloWorldFunctionArn:
-    Description: "Hello World Lambda Function ARN"
-    Value: !GetAtt HelloWorldFunction.Arn
-  HelloWorldFunctionRoleArn:
-    Description: "Implicit IAM Role created for Hello World function"
-    Value: !GetAtt FunctionRole.Arn
+  CostReportApi:
+    Description: "API Gateway endpoint URL for Prod stage for Cost Report function"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/run/"
+  CostReportFunctionArn:
+    Description: "Cost Report Lambda Function ARN"
+    Value: !GetAtt CostReportFunction.Arn
+  CostReportFunctionRoleArn:
+    Description: "Implicit IAM Role created for Cost Report function"
+    Value: !GetAtt CostReportFunctionRole.Arn
