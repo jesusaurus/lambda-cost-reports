@@ -6,7 +6,7 @@ boto3 = "~=1.24"
 
 [packages]
 pandas = "~=1.4"
-pyarrow = "~=8.0"   # Needed by pandas to read parquet
+fastparquet = "~=0.8"   # Needed by pandas to read parquet
 jinja2 = "~=3.1"    # Needed by pandas to generate HTML
 fsspec = "~=2022.8" # Needed by pandas to write directly to S3
 s3fs = "~=2022.8"   # Needed by pandas to write directly to S3
