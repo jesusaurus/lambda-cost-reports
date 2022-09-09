@@ -13,6 +13,8 @@ FIXTURE_DIR = os.path.join(
     'fixture',
 )
 
+TEST_BUCKET = 'testBucket'
+
 
 @pytest.fixture()
 def parquet():
@@ -53,7 +55,7 @@ def test_api(caplog, mocker, parquet, csv):
         stub.add_response('get_object', parquet)
 
         # Test initialization without an input key
-        test_app = app.App(None)
+        test_app = app.App(TEST_BUCKET, None)
 
         # Skip file upload
         test_app._upload_results = mocker.MagicMock()
@@ -80,7 +82,7 @@ def test_s3_eb(caplog, mocker, parquet, csv):
 
         # Test initialization with a known past date
         s3_key_with_date = 'monthly-costs/year=2022/month=7/test.snappy.parquet'
-        test_app = app.App(s3_key_with_date)
+        test_app = app.App(TEST_BUCKET, s3_key_with_date)
 
         # Skip file upload
         test_app._upload_results = mocker.MagicMock()

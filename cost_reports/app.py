@@ -26,7 +26,7 @@ OUTPUT_PARQUET = f"{REPORT_NAME}-by-center.parquet"
 class App:
     s3 = None
 
-    def __init__(self, s3_key):
+    def __init__(self, bucket, s3_key):
         if App.s3 is None:
             App.s3 = boto3.client('s3')
 
@@ -36,7 +36,7 @@ class App:
         self.summary = None
         self.data = None
 
-        self.bucket = os.environ.get('CUR_BUCKET', 'sagebase-cost-reports')
+        self.bucket = bucket
 
         if s3_key is None:
             self._year_month()
@@ -158,15 +158,25 @@ def lambda_handler(event, context):
 
     try:
         s3_key = None
-        if 'detail' in event:  # event-bridge event
-            record = event['detail']
-            if 'requestParameters' in record and 'key' in record['requestParameters']:
-                s3_key = record['requestParameters']['key']
-                LOG.info(f"Found S3 key: {s3_key}")
-            else:
-                LOG.warn("No S3 key found in event")
+        if 'Records' in event: # s3 notification
+            record = event['Records'][0] # assume one record
+            try:
+                s3_key = record['s3']['object']['key']
+                bucket = record['s3']['bucket']['name']
+                LOG.info(f"Found S3 bucket/key: {bucket}/{s3_key}")
+            except KeyError:
+                LOG.warn("No S3 info found in event record")
+        elif 'detail' in event:  # event-bridge event
+            detail = event['detail']
+            try:
+                s3_key = detail['requestParameters']['key']
+                bucket = detail['requestParameters']['bucketName']
+                LOG.info(f"Found S3 bucket/key: {bucket}/{s3_key}")
+            except KeyError:
+                LOG.warn("No S3 info found in event detail")
 
-        app = App(s3_key)
+
+        app = App(bucket, s3_key)
         app.run()
 
     except Exception as e:

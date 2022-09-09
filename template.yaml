@@ -9,11 +9,10 @@ Globals:
     Timeout: 180
 
 Parameters:
-  CurBucket:
+  bucketName:
     Description: >
       The S3 bucket that AWS Billing writes the Cost and Usage Reports to.
     Type: String
-    Default: sagebase-cost-reports
 
 Resources:
   CostReportPolicy:
@@ -24,7 +23,7 @@ Resources:
         Statement:
           - Sid: LambdaBucketAccess
             Effect: Allow
-            Resource: !Sub "arn:aws:s3:::${CurBucket}/*"
+            Resource: !Sub "arn:aws:s3:::${bucketName}/*"
             Action:
               - "s3:*"
 
@@ -53,9 +52,6 @@ Resources:
       Runtime: python3.9
       MemorySize: 256
       Role: !GetAtt CostReportFunctionRole.Arn
-      Environment:
-        Variables:
-          CUR_BUCKET: !Ref CurBucket
       Events:  # More info about Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#schedule
         ApiTrigger:  # Ad-Hoc runs
           Type: Api
@@ -63,28 +59,15 @@ Resources:
             Path: /run
             Method: get
 
-  S3EventRule:
-    Type: AWS::Events::Rule
+  BucketPermission:
+    Type: "AWS::Lambda::Permission"
     Properties:
-      Description: S3EventTrigger
-      State: ENABLED
-      EventPattern:
-        source:
-          - aws.s3
-        detail:
-          eventName:
-            - PutObject
-            - CopyObject
-            - CompleteMultipartUpload
-            - RestoreObject
-          requestParameters:
-            bucketName:
-              - !Ref CurBucket
-            key:
-              - suffix: '.snappy.parquet'
-      Targets:
-        - Arn: !GetAtt CostReportFunction.Arn
-          Id: CostReportFunction
+      Action: 'lambda:InvokeFunction'
+      FunctionName: !GetAtt CostReportFunction.Arn
+      Principal: 's3.amazonaws.com'
+      SourceArn: !Sub "arn:aws:s3:::${bucketName}/*"
+      SourceAccount: !Ref 'AWS::AccountId'
+
 
 Outputs:
   # ServerlessRestApi is an implicit API created out of Events key under Serverless::Function
@@ -96,6 +79,8 @@ Outputs:
   CostReportFunctionArn:
     Description: "Cost Report Lambda Function ARN"
     Value: !GetAtt CostReportFunction.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-CostReportFunctionArn"
   CostReportFunctionRoleArn:
     Description: "Implicit IAM Role created for Cost Report function"
     Value: !GetAtt CostReportFunctionRole.Arn
