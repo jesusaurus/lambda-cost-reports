@@ -65,7 +65,7 @@ Resources:
       Action: 'lambda:InvokeFunction'
       FunctionName: !GetAtt CostReportFunction.Arn
       Principal: 's3.amazonaws.com'
-      SourceArn: !Sub "arn:aws:s3:::${bucketName}/*"
+      SourceArn: !Sub "arn:aws:s3:::${bucketName}"
       SourceAccount: !Ref 'AWS::AccountId'
 
 
