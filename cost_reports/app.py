@@ -11,6 +11,7 @@ import datetime
 
 # other imports
 import boto3
+from urllib.parse import unquote_plus as url_unquote
 
 
 LOG = logging.getLogger(__name__)
@@ -161,16 +162,16 @@ def lambda_handler(event, context):
         if 'Records' in event: # s3 notification
             record = event['Records'][0] # assume one record
             try:
-                s3_key = record['s3']['object']['key']
-                bucket = record['s3']['bucket']['name']
+                s3_key = url_unquote(record['s3']['object']['key'])
+                bucket = url_unquote(record['s3']['bucket']['name'])
                 LOG.info(f"Found S3 bucket/key: {bucket}/{s3_key}")
             except KeyError:
                 LOG.warn("No S3 info found in event record")
         elif 'detail' in event:  # event-bridge event
             detail = event['detail']
             try:
-                s3_key = detail['requestParameters']['key']
-                bucket = detail['requestParameters']['bucketName']
+                s3_key = url_unquote(detail['requestParameters']['key'])
+                bucket = url_unquote(detail['requestParameters']['bucketName'])
                 LOG.info(f"Found S3 bucket/key: {bucket}/{s3_key}")
             except KeyError:
                 LOG.warn("No S3 info found in event detail")
